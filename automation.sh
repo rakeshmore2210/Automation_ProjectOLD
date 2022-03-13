@@ -4,10 +4,15 @@
 #BASH Script for:-
 #1. Hosting Web Server
 #2. Archiving Logs
+#3. Bookkeeping of archived files
+#4. Cron Job for execution of the script
 
 #Declaring variables
 name="Rakesh"
 s3_bucket="upgrad-rakesh"
+inventoryFile="/var/www/html/inventory.html"
+cronJobFile="/etc/cron.d/automation"
+automationScriptFile="/root/Automation_Project/automation.sh"
 
 #Script updates the package information
 echo "APT Update In-progress...!!!"
@@ -40,8 +45,31 @@ fi
 
 #Archiving logs to S3
 echo "TAR Apache2 Logs...!!!"
-tarFileName=$name-httpd-logs-$(date '+%m%d%Y-%H%M%S').tar
+timestamp=$(date '+%m%d%Y-%H%M%S')
+tarFileName=$name-httpd-logs-$timestamp.tar
 cd /var/log/apache2/
 sudo tar -cvf /tmp/$tarFileName *.log
 echo "Copy Apache2 Logs TAR to S3 Bucket...!!!"
 aws s3 cp /tmp/$tarFileName s3://${s3_bucket}/$tarFileName
+
+#Bookkeeping
+sizeOfTAR=`ls /tmp/$tarFileName -sh | awk {'print $1'}`
+if [ -f "$inventoryFile" ]; then
+    echo "$inventoryFile already exists...!!!"
+else
+    echo "Creating $inventoryFile file...!!!"
+    touch $inventoryFile
+    echo -e 'Log Type\tDate Created\t\tType\tSize' >> $inventoryFile
+fi
+echo "Adding record to inventory...!!!"
+echo -e 'httpd-logs\t'$timestamp'\t\ttar\t'$sizeOfTAR >> $inventoryFile
+
+#Cron Job
+if [ -f "$cronJobFile" ]; then
+    echo "$cronJobFile already exists...!!!"
+else
+    echo "Creating $cronJobFile file...!!!"
+    touch $cronJobFile
+    echo "Setting CRON Job to run every day...!!!"
+    echo '0 0 * * * root '$automationScriptFile >> $cronJobFile
+fi
